@@ -138,6 +138,12 @@ if __name__ == "__main__":
     else:
         logging.info('Automatic session management: DISABLED (set AUTO_SESSION_MANAGEMENT=true to enable)')
 
+    # Log proxy configuration
+    if env_proxy_url:
+        logging.info(f'Default proxy: {env_proxy_url}')
+    else:
+        logging.info('No default proxy configured')
+
     # Get current OS for global variable
     utils.get_current_platform()
 
