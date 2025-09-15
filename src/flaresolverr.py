@@ -13,6 +13,8 @@ from dtos import V1RequestBase
 import flaresolverr_service
 import utils
 
+env_proxy = os.environ.get('PROXY_URL', None)
+
 
 class JSONErrorBottle(Bottle):
     """
@@ -50,7 +52,11 @@ def controller_v1():
     """
     Controller v1
     """
-    req = V1RequestBase(request.json)
+    data = request.json or {}
+    if (('proxy' not in data or not data.get('proxy')) and env_proxy is not None):
+        data['proxy'] = {"url": env_proxy}
+        logging.debug(f'Applied default proxy from PROXY_URL: {env_proxy}')
+    req = V1RequestBase(data)
     res = flaresolverr_service.controller_v1_endpoint(req)
     if res.__error_500__:
         response.status = 500
@@ -110,6 +116,12 @@ if __name__ == "__main__":
         logging.info(f'  Max auto sessions: {os.environ.get("MAX_AUTO_SESSIONS", "10")}')
     else:
         logging.info('Automatic session management: DISABLED (set AUTO_SESSION_MANAGEMENT=true to enable)')
+
+    # Log proxy configuration
+    if env_proxy:
+        logging.info(f'Default proxy: {env_proxy}')
+    else:
+        logging.info('No default proxy configured')
 
     # Get current OS for global variable
     utils.get_current_platform()
