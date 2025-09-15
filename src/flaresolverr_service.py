@@ -226,11 +226,25 @@ def _cmd_sessions_destroy(req: V1RequestBase) -> V1ResponseBase:
     })
 
 
+def cleanup_auto_sessions() -> int:
+    """Cleanup stale auto-sessions"""
+    try:
+        cleaned = SESSIONS_STORAGE.cleanup_stale_sessions()
+        if cleaned > 0:
+            logging.info(f"Cleaned up {cleaned} stale auto-sessions")
+        return cleaned
+    except Exception as e:
+        logging.error(f"Error during auto-session cleanup: {e}")
+        return 0
+
+
 def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
     timeout = int(req.maxTimeout) / 1000
     driver = None
+    auto_session_used = False
     try:
         if req.session:
+            # Manual session management (existing code)
             session_id = req.session
             ttl = timedelta(minutes=req.session_ttl_minutes) if req.session_ttl_minutes else None
             session, fresh = SESSIONS_STORAGE.get(session_id, ttl)
@@ -243,15 +257,30 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
 
             driver = session.driver
         else:
-            driver = utils.get_webdriver(req.proxy)
-            logging.debug('New instance of webdriver has been created to perform the request')
+            # Check for automatic session management
+            if req.url:
+                session, fresh = SESSIONS_STORAGE.get_or_create_auto_session(req.url, req.proxy)
+                if session:
+                    driver = session.driver
+                    auto_session_used = True
+                    if fresh:
+                        logging.debug(f"Created new automatic session for request (session_id={session.session_id})")
+                    else:
+                        logging.debug(f"Using existing automatic session for request (session_id={session.session_id})")
+
+            # Fallback to original behavior if auto-session is disabled or failed
+            if not driver:
+                driver = utils.get_webdriver(req.proxy)
+                logging.debug('New instance of webdriver has been created to perform the request')
+
         return func_timeout(timeout, _evil_logic, (req, driver, method))
     except FunctionTimedOut:
         raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
     except Exception as e:
         raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
     finally:
-        if not req.session and driver is not None:
+        # Only destroy driver if not using any session (manual or auto)
+        if not req.session and not auto_session_used and driver is not None:
             if utils.PLATFORM_VERSION == "nt":
                 driver.close()
             driver.quit()
