@@ -17,7 +17,7 @@ import utils
 from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
                   ChallengeResolutionT, HealthResponse, IndexResponse,
                   V1RequestBase, V1ResponseBase)
-from sessions import SessionsStorage
+from sessions import SessionsStorage, run_in_background_loop
 
 # Base directory for user data dirs (cookie persistence)
 USER_DATA_BASE_DIR = os.environ.get('USER_DATA_DIR', '/tmp/flaresolverr-sessions')
@@ -61,38 +61,61 @@ async def _navigate_with_cf_bypass(tab: Tab, url: str, has_cf_cookie: bool = Fal
     """
     Navigate to URL. Always try direct navigation first, then detect if CF bypass needed.
     """
-    # Always do direct navigation first - fast for most sites
-    # Wrap in wait_for since pydoll's timeout parameter may not work reliably
+    # Log current state before navigation
+    current_url = None
     try:
-        await asyncio.wait_for(tab.go_to(url), timeout=20)
-    except asyncio.TimeoutError:
-        raise Exception("Page load timed out")
+        current_url = await tab.current_url
+        logging.debug(f"Current URL before navigation: {current_url}")
+    except Exception as e:
+        logging.debug(f"Could not get current URL: {e}")
 
-    # Check if we hit a Cloudflare challenge (only if no cf_clearance cookie)
-    if not has_cf_cookie:
+    if has_cf_cookie:
+        logging.debug(f"Has cf_clearance cookie, expecting no challenge")
+
+    # If we're already on the target URL with a valid cookie, just refresh
+    # This avoids potential proxy/network issues from full navigation
+    same_url = current_url and current_url.rstrip('/') == url.rstrip('/')
+    if same_url and has_cf_cookie:
+        logging.debug("Already on target URL with cookie, refreshing page")
         try:
-            title_result = await tab.execute_script('return document.title')
-            page_title = title_result.get('result', {}).get('result', {}).get('value', '')
+            await asyncio.wait_for(tab.refresh(), timeout=20)
+        except asyncio.TimeoutError:
+            raise Exception("Page refresh timed out")
+    else:
+        # Full navigation
+        try:
+            await asyncio.wait_for(tab.go_to(url), timeout=20)
+        except asyncio.TimeoutError:
+            raise Exception("Page load timed out")
 
-            # Check for CF challenge titles
-            cf_challenge = any(t.lower() in page_title.lower() for t in CHALLENGE_TITLES)
+    # Check page title for challenge
+    try:
+        title_result = await tab.execute_script('return document.title')
+        page_title = title_result.get('result', {}).get('result', {}).get('value', '')
+        cf_challenge = any(t.lower() in page_title.lower() for t in CHALLENGE_TITLES)
+    except Exception as e:
+        logging.debug(f"Could not check page title: {e}")
+        return
 
-            if cf_challenge:
-                logging.info(f"Cloudflare challenge detected (title: {page_title}), solving...")
-                # Use pydoll's CF bypass to solve the challenge
-                try:
-                    async with tab.expect_and_bypass_cloudflare_captcha(
-                        time_before_click=2,
-                        time_to_wait_captcha=15,
-                    ):
-                        await asyncio.wait_for(tab.go_to(url), timeout=30)
-                    logging.info("Cloudflare challenge solved")
-                except asyncio.TimeoutError:
-                    logging.warning("Cloudflare bypass navigation timed out")
-                except Exception as e:
-                    logging.debug(f"Cloudflare bypass error: {e}")
+    # If we have cf_clearance but still got challenged, the cookie is invalid (IP changed)
+    if cf_challenge and has_cf_cookie:
+        logging.warning(f"CF challenge despite having cf_clearance cookie - IP likely changed, will re-solve")
+        has_cf_cookie = False  # Treat as if we don't have a valid cookie
+
+    # Try to solve challenge if detected
+    if cf_challenge:
+        logging.info(f"Cloudflare challenge detected (title: {page_title}), solving...")
+        try:
+            async with tab.expect_and_bypass_cloudflare_captcha(
+                time_before_click=2,
+                time_to_wait_captcha=15,
+            ):
+                await asyncio.wait_for(tab.go_to(url), timeout=30)
+            logging.info("Cloudflare challenge solved")
+        except asyncio.TimeoutError:
+            logging.warning("Cloudflare bypass navigation timed out")
         except Exception as e:
-            logging.debug(f"Could not check for challenge: {e}")
+            logging.debug(f"Cloudflare bypass error: {e}")
 
 
 def test_browser_installation():
@@ -344,14 +367,35 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
 
 
 def _run_challenge_sync(req: V1RequestBase, method: str) -> ChallengeResolutionT:
-    """Sync wrapper that runs everything in a single asyncio.run()."""
-    return asyncio.run(_run_challenge_complete(req, method))
+    """Sync wrapper that runs in the persistent background event loop with auto-retry."""
+    # Use persistent background loop - pydoll connections are event-loop-bound
+    max_retries = 3
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            return run_in_background_loop(_run_challenge_complete(req, method))
+        except Exception as e:
+            last_error = e
+            error_msg = str(e)
+            # Only retry on challenge-related failures, not general errors
+            if "Challenge solving failed" in error_msg or "IP likely changed" in error_msg:
+                if attempt < max_retries - 1:
+                    logging.warning(f"Challenge failed (attempt {attempt + 1}/{max_retries}), retrying with fresh browser...")
+                    continue
+            # Non-retryable error or max retries reached
+            raise
+
+    # Should not reach here, but just in case
+    raise last_error
 
 
 async def _run_challenge_complete(req: V1RequestBase, method: str) -> ChallengeResolutionT:
     """Complete async workflow - browser creation, challenge resolution, and cleanup."""
     browser: Optional[Chrome] = None
     tab: Optional[Tab] = None
+    using_session = False  # Track if we're using a reusable session
+    auto_session_id = None  # Track auto-session ID for cleanup on failure
 
     try:
         if req.session:
@@ -370,8 +414,30 @@ async def _run_challenge_complete(req: V1RequestBase, method: str) -> ChallengeR
             tab = session.tab
             cookie_file = None
             saved_cookies = []
+            using_session = True
+        elif SESSIONS_STORAGE.auto_session_enabled:
+            # Auto session management - reuse browser per domain
+            session, fresh = await SESSIONS_STORAGE.get_or_create_auto_session_async(req.url, req.proxy)
+            if session:
+                auto_session_id = session.session_id  # Track for cleanup on failure
+                if fresh:
+                    logging.debug(f"new auto-session created for domain (session_id={auto_session_id})")
+                else:
+                    logging.debug(f"reusing auto-session (session_id={auto_session_id}, lifetime={str(session.lifetime())})")
+                # All operations run in same event loop, no connection refresh needed
+                tab = session.get_tab()
+                browser = session.browser
+                using_session = True
+                saved_cookies = []
+                cookie_file = None
+            else:
+                # Fallback if auto-session creation failed
+                logging.warning("Auto-session creation failed, using one-off browser")
+                browser, tab = await utils.get_browser_and_tab(req.proxy)
+                saved_cookies = []
+                cookie_file = None
         else:
-            # Use file-based cookies for persistence (fast incognito mode)
+            # No session management - create one-off browser with file-based cookies
             cookie_file = _get_cookie_file_for_url(req.url)
 
             # Don't pass user_data_dir - uses incognito mode for fast startup
@@ -385,7 +451,7 @@ async def _run_challenge_complete(req: V1RequestBase, method: str) -> ChallengeR
         # Run the challenge resolution (pass saved cookies for auto-session)
         result = await _evil_logic(req, browser, tab, method, saved_cookies)
 
-        # Save cookies after resolution ONLY if we got cf_clearance
+        # Save cookies after resolution ONLY if we got cf_clearance (for file-based mode)
         if cookie_file and tab:
             try:
                 cookies = await tab.get_cookies()
@@ -396,13 +462,20 @@ async def _run_challenge_complete(req: V1RequestBase, method: str) -> ChallengeR
 
         return result
 
+    except Exception as e:
+        # On challenge solving failure, destroy the auto-session so next request starts fresh
+        if auto_session_id:
+            logging.warning(f"Challenge failed, destroying auto-session {auto_session_id} for fresh retry")
+            SESSIONS_STORAGE.destroy(auto_session_id)
+        raise
+
     finally:
-        # Cleanup browser (unless using manual session)
-        if not req.session and browser is not None:
+        # Cleanup browser only if NOT using a reusable session
+        if not using_session and browser is not None:
             try:
                 await asyncio.wait_for(browser.stop(), timeout=5.0)
             except Exception:
-                pass  # Browser cleanup errors are not critical
+                pass  # Tab cleanup errors are not critical
 
 
 async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str, saved_cookies: list = None) -> ChallengeResolutionT:
@@ -411,7 +484,7 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
     res.status = STATUS_OK
     res.message = ""
 
-    # Restore saved cookies BEFORE navigation using CDP (for auto-session)
+    # Restore saved cookies BEFORE navigation using CDP (for file-based sessions)
     if saved_cookies:
         try:
             # Use CDP Network.setCookies to set cookies without needing page context
@@ -423,8 +496,24 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
         except Exception as e:
             logging.debug(f"Could not restore cookies: {e}")
 
-    # Check if we have a cf_clearance cookie (skip slow CF bypass if we do)
+    # Check if we have a cf_clearance cookie in browser (for auto-sessions, cookies persist in browser)
     has_cf_cookie = any(c.get('name') == 'cf_clearance' for c in saved_cookies) if saved_cookies else False
+
+    # For auto-sessions, also check browser's actual cookies for the target URL
+    if not has_cf_cookie:
+        try:
+            from pydoll.commands import NetworkCommands
+            response = await tab._execute_command(NetworkCommands.get_cookies(urls=[req.url]))
+            browser_cookies = response.get('result', {}).get('cookies', [])
+            cookie_names = [c.get('name') for c in browser_cookies]
+            logging.debug(f"Browser cookies for {req.url}: {cookie_names}")
+            has_cf_cookie = any(c.get('name') == 'cf_clearance' for c in browser_cookies)
+            if has_cf_cookie:
+                logging.debug("Found cf_clearance cookie in browser, will skip CF bypass")
+            else:
+                logging.debug("No cf_clearance cookie found in browser")
+        except Exception as e:
+            logging.debug(f"Could not check browser cookies: {e}")
 
     # Navigate to the page
     turnstile_token = None
@@ -485,13 +574,14 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
                 pass
 
     attempt = 0
+    max_challenge_attempts = 30  # Max attempts before giving up (~30 seconds with 1s sleep)
     if challenge_found:
-        while True:
+        while attempt < max_challenge_attempts:
             try:
                 attempt = attempt + 1
 
                 # Wait for title to change
-                logging.debug("Waiting for challenge to complete (attempt " + str(attempt) + ")")
+                logging.debug("Waiting for challenge to complete (attempt " + str(attempt) + "/" + str(max_challenge_attempts) + ")")
 
                 # Check if challenge is still present
                 still_challenging = False
@@ -529,6 +619,10 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
                 logging.debug("Timeout waiting for challenge")
                 await _click_verify_pydoll(tab)
 
+        if attempt >= max_challenge_attempts:
+            logging.error(f"Challenge solving failed after {max_challenge_attempts} attempts")
+            raise Exception(f"Challenge solving failed after {max_challenge_attempts} attempts - Cloudflare may be blocking this request")
+
         logging.info("Challenge solved!")
         res.message = "Challenge solved!"
     else:
@@ -538,7 +632,17 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
     # Build result
     challenge_res = ChallengeResolutionResultT({})
     challenge_res.url = await tab.current_url
-    challenge_res.cookies = await tab.get_cookies()
+
+    # Get cookies for the target URL specifically (not just current page)
+    # This ensures we get cookies even if page navigated away
+    try:
+        from pydoll.commands import NetworkCommands
+        response = await tab._execute_command(NetworkCommands.get_cookies(urls=[req.url]))
+        challenge_res.cookies = response.get('result', {}).get('cookies', [])
+    except Exception as e:
+        logging.debug(f"Error getting cookies for URL, falling back to page cookies: {e}")
+        challenge_res.cookies = await tab.get_cookies()
+    logging.debug(f"Final cookies: {[c.get('name') for c in challenge_res.cookies]}")
     challenge_res.status = 200
     challenge_res.userAgent = utils.get_user_agent()
     challenge_res.turnstile_token = turnstile_token
@@ -550,10 +654,24 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
             logging.info("Waiting " + str(req.waitInSeconds) + " seconds before returning the response...")
             await asyncio.sleep(req.waitInSeconds)
 
-        challenge_res.response = await tab.page_source
+        try:
+            challenge_res.response = await tab.page_source
+        except Exception as e:
+            logging.warning(f"Error getting page source: {e}")
+            # Try alternative method - execute script to get HTML
+            try:
+                html_result = await tab.execute_script('return document.documentElement.outerHTML')
+                challenge_res.response = html_result.get('result', {}).get('result', {}).get('value', '')
+            except Exception as e2:
+                logging.warning(f"Fallback page source also failed: {e2}")
+                challenge_res.response = ""
 
     if req.returnScreenshot:
-        challenge_res.screenshot = await tab.take_screenshot(as_base64=True)
+        try:
+            challenge_res.screenshot = await tab.take_screenshot(as_base64=True)
+        except Exception as e:
+            logging.warning(f"Error taking screenshot: {e}")
+            challenge_res.screenshot = ""
 
     res.result = challenge_res
     return res

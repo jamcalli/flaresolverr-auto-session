@@ -83,6 +83,20 @@ async def get_browser_and_tab(proxy: dict = None, user_data_dir: str = None) -> 
     options.add_argument('--no-sandbox')
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-search-engine-choice-screen')
+
+    # Anti-detection flags
+    options.add_argument('--disable-blink-features=AutomationControlled')
+
+    # Stealth browser preferences (simulate aged profile)
+    import time as _time
+    current_time = int(_time.time())
+    options.browser_preferences = {
+        'profile': {
+            'exited_cleanly': True,
+            'exit_type': 'Normal',
+        },
+        'safebrowsing': {'enabled': True},
+    }
     options.add_argument('--disable-setuid-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
@@ -124,8 +138,17 @@ async def get_browser_and_tab(proxy: dict = None, user_data_dir: str = None) -> 
         options.add_argument('--proxy-server=%s' % proxy_url)
 
     # Headless mode - use --headless=new for Chrome 109+
+    # OR use xvfb for better anti-detection (virtual display instead of true headless)
+    use_xvfb = os.environ.get('USE_XVFB', 'false').lower() == 'true'
+
     if get_config_headless():
-        options.add_argument('--headless=new')
+        if use_xvfb:
+            # Use xvfb virtual display instead of headless mode
+            # This avoids headless browser fingerprinting
+            start_xvfb_display()
+            # Don't add --headless flag, run headed in virtual display
+        else:
+            options.add_argument('--headless=new')
 
     # Create browser and start
     browser = Chrome(options=options)
