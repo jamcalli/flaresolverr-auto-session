@@ -27,9 +27,9 @@ WORKDIR /app
     # Install dummy packages
 RUN dpkg -i /libgl1-mesa-dri.deb \
     && dpkg -i /adwaita-icon-theme.deb \
-    # Install dependencies
+    # Install dependencies (no chromedriver needed - pydoll uses CDP directly)
     && apt-get update \
-    && apt-get install -y --no-install-recommends chromium chromium-common chromium-driver xvfb dumb-init \
+    && apt-get install -y --no-install-recommends chromium chromium-common xvfb dumb-init \
         procps curl vim xauth \
     # Remove temporary files and hardware decoding libraries
     && rm -rf /var/lib/apt/lists/* \
@@ -37,11 +37,12 @@ RUN dpkg -i /libgl1-mesa-dri.deb \
     && rm -f /usr/lib/x86_64-linux-gnu/mfx/* \
     # Create flaresolverr user
     && useradd --home-dir /app --shell /bin/sh flaresolverr \
-    && mv /usr/bin/chromedriver chromedriver \
     && chown -R flaresolverr:flaresolverr . \
-    # Create config dir
+    # Create config and data dirs
     && mkdir /config \
-    && chown flaresolverr:flaresolverr /config
+    && chown flaresolverr:flaresolverr /config \
+    && mkdir -p /tmp/flaresolverr-sessions \
+    && chown flaresolverr:flaresolverr /tmp/flaresolverr-sessions
 
 VOLUME /config
 

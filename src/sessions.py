@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import threading
@@ -7,7 +8,8 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 from uuid import uuid1
 
-from selenium.webdriver.chrome.webdriver import WebDriver
+from pydoll.browser import Chrome
+from pydoll.browser.tab import Tab
 
 import utils
 
@@ -15,7 +17,8 @@ import utils
 @dataclass
 class Session:
     session_id: str
-    driver: WebDriver
+    browser: Chrome
+    tab: Tab
     created_at: datetime
 
     def lifetime(self) -> timedelta:
@@ -38,13 +41,13 @@ class SessionsStorage:
 
     def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
                force_new: Optional[bool] = False) -> Tuple[Session, bool]:
-        """create creates new instance of WebDriver if necessary,
+        """create creates new instance of Browser/Tab if necessary,
         assign defined (or newly generated) session_id to the instance
         and returns the session object. If a new session has been created
         second argument is set to True.
 
         Note: The function is idempotent, so in case if session_id
-        already exists in the storage a new instance of WebDriver won't be created
+        already exists in the storage a new instance won't be created
         and existing session will be returned. Second argument defines if
         new session has been created (True) or an existing one was used (False).
         """
@@ -57,9 +60,9 @@ class SessionsStorage:
             if self.exists(session_id):
                 return self.sessions[session_id], False
 
-            driver = utils.get_webdriver(proxy)
+            browser, tab = utils.get_webdriver_sync(proxy)
             created_at = datetime.now()
-            session = Session(session_id, driver, created_at)
+            session = Session(session_id, browser, tab, created_at)
 
             self.sessions[session_id] = session
 
@@ -70,7 +73,7 @@ class SessionsStorage:
             return session_id in self.sessions
 
     def destroy(self, session_id: str) -> bool:
-        """destroy closes the driver instance and removes session from the storage.
+        """destroy closes the browser instance and removes session from the storage.
         The function is noop if session_id doesn't exist.
         The function returns True if session was found and destroyed,
         and False if session_id wasn't found.
@@ -80,9 +83,18 @@ class SessionsStorage:
                 return False
 
             session = self.sessions.pop(session_id)
-            if utils.PLATFORM_VERSION == "nt":
-                session.driver.close()
-            session.driver.quit()
+            try:
+                # Stop the browser with a short timeout to avoid blocking
+                async def stop_browser():
+                    try:
+                        await asyncio.wait_for(session.browser.stop(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        logging.debug(f"Browser stop timed out for session {session_id}")
+                    except Exception as e:
+                        logging.debug(f"Browser stop error for session {session_id}: {e}")
+                asyncio.run(stop_browser())
+            except Exception as e:
+                logging.debug(f"Error in browser cleanup for session {session_id}: {e}")
             return True
 
     def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[Session, bool]:

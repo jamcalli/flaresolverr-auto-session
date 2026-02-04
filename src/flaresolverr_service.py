@@ -1,26 +1,26 @@
+import asyncio
 import logging
+import os
 import platform
 import sys
 import time
 from datetime import timedelta
 from html import escape
-from urllib.parse import unquote, quote
+from urllib.parse import unquote, quote, urlparse
+from typing import Optional
 
 from func_timeout import FunctionTimedOut, func_timeout
-from selenium.common import TimeoutException
-from selenium.webdriver.chrome.webdriver import WebDriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.expected_conditions import (
-    presence_of_element_located, staleness_of, title_is)
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.wait import WebDriverWait
+from pydoll.browser import Chrome
+from pydoll.browser.tab import Tab
 
 import utils
 from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
                   ChallengeResolutionT, HealthResponse, IndexResponse,
                   V1RequestBase, V1ResponseBase)
 from sessions import SessionsStorage
+
+# Base directory for user data dirs (cookie persistence)
+USER_DATA_BASE_DIR = os.environ.get('USER_DATA_DIR', '/tmp/flaresolverr-sessions')
 
 ACCESS_DENIED_TITLES = [
     # Cloudflare
@@ -57,12 +57,50 @@ SHORT_TIMEOUT = 1
 SESSIONS_STORAGE = SessionsStorage()
 
 
+async def _navigate_with_cf_bypass(tab: Tab, url: str, has_cf_cookie: bool = False):
+    """
+    Navigate to URL. Always try direct navigation first, then detect if CF bypass needed.
+    """
+    # Always do direct navigation first - fast for most sites
+    # Wrap in wait_for since pydoll's timeout parameter may not work reliably
+    try:
+        await asyncio.wait_for(tab.go_to(url), timeout=20)
+    except asyncio.TimeoutError:
+        raise Exception("Page load timed out")
+
+    # Check if we hit a Cloudflare challenge (only if no cf_clearance cookie)
+    if not has_cf_cookie:
+        try:
+            title_result = await tab.execute_script('return document.title')
+            page_title = title_result.get('result', {}).get('result', {}).get('value', '')
+
+            # Check for CF challenge titles
+            cf_challenge = any(t.lower() in page_title.lower() for t in CHALLENGE_TITLES)
+
+            if cf_challenge:
+                logging.info(f"Cloudflare challenge detected (title: {page_title}), solving...")
+                # Use pydoll's CF bypass to solve the challenge
+                try:
+                    async with tab.expect_and_bypass_cloudflare_captcha(
+                        time_before_click=2,
+                        time_to_wait_captcha=15,
+                    ):
+                        await asyncio.wait_for(tab.go_to(url), timeout=30)
+                    logging.info("Cloudflare challenge solved")
+                except asyncio.TimeoutError:
+                    logging.warning("Cloudflare bypass navigation timed out")
+                except Exception as e:
+                    logging.debug(f"Cloudflare bypass error: {e}")
+        except Exception as e:
+            logging.debug(f"Could not check for challenge: {e}")
+
+
 def test_browser_installation():
     logging.info("Testing web browser installation...")
     logging.info("Platform: " + platform.platform())
 
     chrome_exe_path = utils.get_chrome_exe_path()
-    if chrome_exe_path is None:
+    if chrome_exe_path is None or chrome_exe_path == '':
         logging.error("Chrome / Chromium web browser not installed!")
         sys.exit(1)
     else:
@@ -70,8 +108,7 @@ def test_browser_installation():
 
     chrome_major_version = utils.get_chrome_major_version()
     if chrome_major_version == '':
-        logging.error("Chrome / Chromium version not detected!")
-        sys.exit(1)
+        logging.warning("Chrome / Chromium version not detected!")
     else:
         logging.info("Chrome / Chromium major version: " + chrome_major_version)
 
@@ -111,7 +148,13 @@ def controller_v1_endpoint(req: V1RequestBase) -> V1ResponseBase:
     res.startTimestamp = start_ts
     res.endTimestamp = int(time.time() * 1000)
     res.version = utils.get_flaresolverr_version()
-    logging.debug(f"Response => POST /v1 body: {utils.object_to_dict(res)}")
+    # Log response without HTML content to keep logs readable
+    res_summary = {
+        'status': res.status,
+        'message': res.message,
+        'cookies': [c.get('name') for c in (res.solution.cookies if res.solution and res.solution.cookies else [])] if hasattr(res, 'solution') and res.solution else [],
+    }
+    logging.debug(f"Response => POST /v1 summary: {res_summary}")
     logging.info(f"Response in {(res.endTimestamp - res.startTimestamp) / 1000} s")
     return res
 
@@ -184,7 +227,6 @@ def _cmd_request_post(req: V1RequestBase) -> V1ResponseBase:
 
 
 def _cmd_sessions_create(req: V1RequestBase) -> V1ResponseBase:
-    logging.debug("Creating new session...")
 
     session, fresh = SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy)
     session_id = session.session_id
@@ -238,13 +280,82 @@ def cleanup_auto_sessions() -> int:
         return 0
 
 
+def _get_cookie_file_for_url(url: str) -> Optional[str]:
+    """Get a cookie file path for cookie persistence based on domain."""
+    auto_session_enabled = os.environ.get('AUTO_SESSION_MANAGEMENT', 'false').lower() == 'true'
+    if not auto_session_enabled:
+        return None
+
+    try:
+        domain = urlparse(url).netloc
+        if not domain:
+            return None
+        # Sanitize domain for filesystem
+        safe_domain = domain.replace(':', '_').replace('/', '_')
+        cookie_dir = os.path.join(USER_DATA_BASE_DIR, 'cookies')
+        os.makedirs(cookie_dir, exist_ok=True)
+        return os.path.join(cookie_dir, f'{safe_domain}.json')
+    except Exception as e:
+        logging.warning(f"Error getting cookie file path: {e}")
+        return None
+
+
+def _load_cf_cookies_from_file(cookie_file: str) -> list:
+    """Load cookies from a JSON file, but ONLY if it contains cf_clearance."""
+    import json
+    try:
+        if os.path.exists(cookie_file):
+            with open(cookie_file, 'r') as f:
+                cookies = json.load(f)
+                # Only return cookies if we have a cf_clearance cookie
+                if any(c.get('name') == 'cf_clearance' for c in cookies):
+                    return cookies
+    except Exception as e:
+        logging.warning(f"Error loading cookies from {cookie_file}: {e}")
+    return []
+
+
+def _save_cf_cookies_to_file(cookie_file: str, cookies: list):
+    """Save cookies to a JSON file, but ONLY if it contains cf_clearance."""
+    import json
+    # Only save if we have a cf_clearance cookie - no point saving other cookies
+    if not any(c.get('name') == 'cf_clearance' for c in cookies):
+        return
+    try:
+        with open(cookie_file, 'w') as f:
+            json.dump(cookies, f)
+    except Exception as e:
+        logging.warning(f"Error saving cookies to {cookie_file}: {e}")
+
+
 def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
+    """Resolve Cloudflare challenge - runs everything in a single event loop."""
     timeout = int(req.maxTimeout) / 1000
-    driver = None
-    auto_session_used = False
+
+    # Run the entire async workflow in a single event loop
+    # This is critical - pydoll's CDP connection is tied to the event loop
+    try:
+        result = func_timeout(timeout, _run_challenge_sync, (req, method))
+        return result
+    except FunctionTimedOut:
+        raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
+    except Exception as e:
+        raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
+
+
+def _run_challenge_sync(req: V1RequestBase, method: str) -> ChallengeResolutionT:
+    """Sync wrapper that runs everything in a single asyncio.run()."""
+    return asyncio.run(_run_challenge_complete(req, method))
+
+
+async def _run_challenge_complete(req: V1RequestBase, method: str) -> ChallengeResolutionT:
+    """Complete async workflow - browser creation, challenge resolution, and cleanup."""
+    browser: Optional[Chrome] = None
+    tab: Optional[Tab] = None
+
     try:
         if req.session:
-            # Manual session management (existing code)
+            # Manual session management - use SessionsStorage (legacy)
             session_id = req.session
             ttl = timedelta(minutes=req.session_ttl_minutes) if req.session_ttl_minutes else None
             session, fresh = SESSIONS_STORAGE.get(session_id, ttl)
@@ -255,236 +366,168 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
                 logging.debug(f"existing session is used to perform the request (session_id={session_id}, "
                               f"lifetime={str(session.lifetime())}, ttl={str(ttl)})")
 
-            driver = session.driver
+            browser = session.browser
+            tab = session.tab
+            cookie_file = None
+            saved_cookies = []
         else:
-            # Check for automatic session management
-            if req.url:
-                session, fresh = SESSIONS_STORAGE.get_or_create_auto_session(req.url, req.proxy)
-                if session:
-                    driver = session.driver
-                    auto_session_used = True
-                    if fresh:
-                        logging.debug(f"Created new automatic session for request (session_id={session.session_id})")
-                    else:
-                        logging.debug(f"Using existing automatic session for request (session_id={session.session_id})")
+            # Use file-based cookies for persistence (fast incognito mode)
+            cookie_file = _get_cookie_file_for_url(req.url)
 
-            # Fallback to original behavior if auto-session is disabled or failed
-            if not driver:
-                driver = utils.get_webdriver(req.proxy)
-                logging.debug('New instance of webdriver has been created to perform the request')
+            # Don't pass user_data_dir - uses incognito mode for fast startup
+            browser, tab = await utils.get_browser_and_tab(req.proxy)
 
-        return func_timeout(timeout, _evil_logic, (req, driver, method))
-    except FunctionTimedOut:
-        raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
-    except Exception as e:
-        raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
+            # Load saved cookies ONLY if we have cf_clearance (skip for non-CF sites)
+            saved_cookies = []
+            if cookie_file:
+                saved_cookies = _load_cf_cookies_from_file(cookie_file)
+
+        # Run the challenge resolution (pass saved cookies for auto-session)
+        result = await _evil_logic(req, browser, tab, method, saved_cookies)
+
+        # Save cookies after resolution ONLY if we got cf_clearance
+        if cookie_file and tab:
+            try:
+                cookies = await tab.get_cookies()
+                if cookies:
+                    _save_cf_cookies_to_file(cookie_file, cookies)
+            except Exception as e:
+                logging.debug(f"Error saving cookies: {e}")
+
+        return result
+
     finally:
-        # Only destroy driver if not using any session (manual or auto)
-        if not req.session and not auto_session_used and driver is not None:
-            if utils.PLATFORM_VERSION == "nt":
-                driver.close()
-            driver.quit()
-            logging.debug('A used instance of webdriver has been destroyed')
+        # Cleanup browser (unless using manual session)
+        if not req.session and browser is not None:
+            try:
+                await asyncio.wait_for(browser.stop(), timeout=5.0)
+            except Exception:
+                pass  # Browser cleanup errors are not critical
 
 
-def click_verify(driver: WebDriver, num_tabs: int = 1):
-    try:
-        logging.debug("Try to find the Cloudflare verify checkbox...")
-        actions = ActionChains(driver)
-        actions.pause(5)
-        for _ in range(num_tabs):
-            actions.send_keys(Keys.TAB).pause(0.1)
-        actions.pause(1)
-        actions.send_keys(Keys.SPACE).perform()
-        
-        logging.debug(f"Cloudflare verify checkbox clicked after {num_tabs} tabs!")
-    except Exception:
-        logging.debug("Cloudflare verify checkbox not found on the page.")
-    finally:
-        driver.switch_to.default_content()
-
-    try:
-        logging.debug("Try to find the Cloudflare 'Verify you are human' button...")
-        button = driver.find_element(
-            by=By.XPATH,
-            value="//input[@type='button' and @value='Verify you are human']",
-        )
-        if button:
-            actions = ActionChains(driver)
-            actions.move_to_element_with_offset(button, 5, 7)
-            actions.click(button)
-            actions.perform()
-            logging.debug("The Cloudflare 'Verify you are human' button found and clicked!")
-    except Exception:
-        logging.debug("The Cloudflare 'Verify you are human' button not found on the page.")
-
-    time.sleep(2)
-
-def _get_turnstile_token(driver: WebDriver, tabs: int):
-    token_input = driver.find_element(By.CSS_SELECTOR, "input[name='cf-turnstile-response']")
-    current_value = token_input.get_attribute("value")
-    while True:
-        click_verify(driver, num_tabs=tabs)
-        turnstile_token = token_input.get_attribute("value")
-        if turnstile_token:
-            if turnstile_token != current_value:
-                logging.info(f"Turnstile token: {turnstile_token}")
-                return turnstile_token
-        logging.debug(f"Failed to extract token possibly click failed")        
-
-        # reset focus
-        driver.execute_script("""
-            let el = document.createElement('button');
-            el.style.position='fixed';
-            el.style.top='0';
-            el.style.left='0';
-            document.body.prepend(el);
-            el.focus();
-        """)
-        time.sleep(1)
-
-def _resolve_turnstile_captcha(req: V1RequestBase, driver: WebDriver):
-    turnstile_token = None
-    if req.tabs_till_verify is not None:
-        logging.debug(f'Navigating to... {req.url} in order to pass the turnstile challenge')
-        driver.get(req.url)
-
-        turnstile_challenge_found = False
-        for selector in TURNSTILE_SELECTORS:
-            found_elements = driver.find_elements(By.CSS_SELECTOR, selector)   
-            if len(found_elements) > 0:
-                turnstile_challenge_found = True
-                logging.info("Turnstile challenge detected. Selector found: " + selector)
-                break
-        if turnstile_challenge_found:
-            turnstile_token = _get_turnstile_token(driver=driver, tabs=req.tabs_till_verify)
-        else:
-            logging.debug(f'Turnstile challenge not found')
-    return turnstile_token
-
-def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
+async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str, saved_cookies: list = None) -> ChallengeResolutionT:
+    """Main challenge resolution logic using pydoll."""
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
 
-    # optionally block resources like images/css/fonts using CDP
-    disable_media = utils.get_config_disable_media()
-    if req.disableMedia is not None:
-        disable_media = req.disableMedia
-    if disable_media:
-        block_urls = [
-            # Images
-            "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.bmp", "*.svg", "*.ico",
-            "*.PNG", "*.JPG", "*.JPEG", "*.GIF", "*.WEBP", "*.BMP", "*.SVG", "*.ICO",
-            "*.tiff", "*.tif", "*.jpe", "*.apng", "*.avif", "*.heic", "*.heif",
-            "*.TIFF", "*.TIF", "*.JPE", "*.APNG", "*.AVIF", "*.HEIC", "*.HEIF",
-            # Stylesheets
-            "*.css",
-            "*.CSS",
-            # Fonts
-            "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
-            "*.WOFF", "*.WOFF2", "*.TTF", "*.OTF", "*.EOT"
-        ]
+    # Restore saved cookies BEFORE navigation using CDP (for auto-session)
+    if saved_cookies:
         try:
-            logging.debug("Network.setBlockedURLs: %s", block_urls)
-            driver.execute_cdp_cmd("Network.enable", {})
-            driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": block_urls})
-        except Exception:
-            # if CDP commands are not available or fail, ignore and continue
-            logging.debug("Network.setBlockedURLs failed or unsupported on this webdriver")
+            # Use CDP Network.setCookies to set cookies without needing page context
+            conn = tab._connection_handler
+            await conn.execute_command({
+                'method': 'Network.setCookies',
+                'params': {'cookies': saved_cookies}
+            }, timeout=10)
+        except Exception as e:
+            logging.debug(f"Could not restore cookies: {e}")
 
-    # navigate to the page
-    logging.debug(f"Navigating to... {req.url}")
+    # Check if we have a cf_clearance cookie (skip slow CF bypass if we do)
+    has_cf_cookie = any(c.get('name') == 'cf_clearance' for c in saved_cookies) if saved_cookies else False
+
+    # Navigate to the page
     turnstile_token = None
 
     if method == "POST":
-        _post_request(req, driver)
+        await _post_request(req, tab)
     else:
-        if req.tabs_till_verify is None:
-            driver.get(req.url)
+        if req.tabs_till_verify is not None:
+            turnstile_token = await _resolve_turnstile_captcha(req, tab)
         else:
-            turnstile_token = _resolve_turnstile_captcha(req, driver)
+            # Navigate with built-in Cloudflare bypass
+            await _navigate_with_cf_bypass(tab, req.url, has_cf_cookie=has_cf_cookie)
 
     # set cookies if required
     if req.cookies is not None and len(req.cookies) > 0:
         logging.debug(f'Setting cookies...')
+        # Convert cookies to pydoll format
+        pydoll_cookies = []
         for cookie in req.cookies:
-            driver.delete_cookie(cookie['name'])
-            driver.add_cookie(cookie)
+            pydoll_cookies.append({
+                'name': cookie['name'],
+                'value': cookie['value'],
+                'domain': cookie.get('domain'),
+                'path': cookie.get('path', '/'),
+            })
+        await tab.set_cookies(pydoll_cookies)
         # reload the page
         if method == 'POST':
-            _post_request(req, driver)
+            await _post_request(req, tab)
         else:
-            driver.get(req.url)
+            await _navigate_with_cf_bypass(tab, req.url)
 
-    # wait for the page
-    if utils.get_config_log_html():
-        logging.debug(f"Response HTML:\n{driver.page_source}")
-    html_element = driver.find_element(By.TAG_NAME, "html")
-    page_title = driver.title
-
-    # find access denied titles
-    for title in ACCESS_DENIED_TITLES:
-        if page_title.startswith(title):
-            raise Exception('Cloudflare has blocked this request. '
-                            'Probably your IP is banned for this site, check in your web browser.')
-    # find access denied selectors
-    for selector in ACCESS_DENIED_SELECTORS:
-        found_elements = driver.find_elements(By.CSS_SELECTOR, selector)
-        if len(found_elements) > 0:
-            raise Exception('Cloudflare has blocked this request. '
-                            'Probably your IP is banned for this site, check in your web browser.')
-
-    # find challenge by title
+    # Check if we hit a Cloudflare challenge
     challenge_found = False
-    for title in CHALLENGE_TITLES:
-        if title.lower() == page_title.lower():
-            challenge_found = True
-            logging.info("Challenge detected. Title found: " + page_title)
-            break
-    if not challenge_found:
-        # find challenge by selectors
-        for selector in CHALLENGE_SELECTORS:
-            found_elements = driver.find_elements(By.CSS_SELECTOR, selector)
-            if len(found_elements) > 0:
+
+    # Check title for challenge indicators
+    try:
+        title_result = await tab.execute_script('return document.title')
+        page_title = title_result.get('result', {}).get('result', {}).get('value', '')
+        for challenge_title in CHALLENGE_TITLES:
+            if challenge_title.lower() in page_title.lower():
                 challenge_found = True
-                logging.info("Challenge detected. Selector found: " + selector)
+                logging.info(f"Challenge detected! Title: {page_title}")
                 break
+    except Exception as e:
+        logging.debug(f"Could not get title: {e}")
+
+    # Check for challenge selectors if title didn't match
+    if not challenge_found:
+        for selector in CHALLENGE_SELECTORS:
+            try:
+                element = await tab.query(selector, timeout=0, raise_exc=False)
+                if element:
+                    challenge_found = True
+                    logging.info(f"Challenge detected! Selector: {selector}")
+                    break
+            except Exception:
+                pass
 
     attempt = 0
     if challenge_found:
         while True:
             try:
                 attempt = attempt + 1
-                # wait until the title changes
+
+                # Wait for title to change
+                logging.debug("Waiting for challenge to complete (attempt " + str(attempt) + ")")
+
+                # Check if challenge is still present
+                still_challenging = False
+
+                # Check title
+                title_result = await tab.execute_script('return document.title')
+                current_title = title_result.get('result', {}).get('result', {}).get('value', '')
+
                 for title in CHALLENGE_TITLES:
-                    logging.debug("Waiting for title (attempt " + str(attempt) + "): " + title)
-                    WebDriverWait(driver, SHORT_TIMEOUT).until_not(title_is(title))
+                    if title.lower() == current_title.lower():
+                        still_challenging = True
+                        break
 
-                # then wait until all the selectors disappear
-                for selector in CHALLENGE_SELECTORS:
-                    logging.debug("Waiting for selector (attempt " + str(attempt) + "): " + selector)
-                    WebDriverWait(driver, SHORT_TIMEOUT).until_not(
-                        presence_of_element_located((By.CSS_SELECTOR, selector)))
+                # Check selectors
+                if not still_challenging:
+                    for selector in CHALLENGE_SELECTORS:
+                        try:
+                            element = await tab.query(selector, timeout=0, raise_exc=False)
+                            if element:
+                                still_challenging = True
+                                break
+                        except Exception:
+                            pass
 
-                # all elements not found
-                break
+                if not still_challenging:
+                    # Challenge resolved
+                    break
 
-            except TimeoutException:
-                logging.debug("Timeout waiting for selector")
+                # Try to click the Cloudflare verify checkbox using pydoll's method
+                await _click_verify_pydoll(tab)
 
-                click_verify(driver)
+                await asyncio.sleep(SHORT_TIMEOUT)
 
-                # update the html (cloudflare reloads the page every 5 s)
-                html_element = driver.find_element(By.TAG_NAME, "html")
-
-        # waits until cloudflare redirection ends
-        logging.debug("Waiting for redirect")
-        # noinspection PyBroadException
-        try:
-            WebDriverWait(driver, SHORT_TIMEOUT).until(staleness_of(html_element))
-        except Exception:
-            logging.debug("Timeout waiting for redirect")
+            except asyncio.TimeoutError:
+                logging.debug("Timeout waiting for challenge")
+                await _click_verify_pydoll(tab)
 
         logging.info("Challenge solved!")
         res.message = "Challenge solved!"
@@ -492,49 +535,135 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
         logging.info("Challenge not detected!")
         res.message = "Challenge not detected!"
 
+    # Build result
     challenge_res = ChallengeResolutionResultT({})
-    challenge_res.url = driver.current_url
-    challenge_res.status = 200  # todo: fix, selenium not provides this info
-    challenge_res.cookies = driver.get_cookies()
-    challenge_res.userAgent = utils.get_user_agent(driver)
+    challenge_res.url = await tab.current_url
+    challenge_res.cookies = await tab.get_cookies()
+    challenge_res.status = 200
+    challenge_res.userAgent = utils.get_user_agent()
     challenge_res.turnstile_token = turnstile_token
 
     if not req.returnOnlyCookies:
-        challenge_res.headers = {}  # todo: fix, selenium not provides this info
+        challenge_res.headers = {}
 
         if req.waitInSeconds and req.waitInSeconds > 0:
             logging.info("Waiting " + str(req.waitInSeconds) + " seconds before returning the response...")
-            time.sleep(req.waitInSeconds)
+            await asyncio.sleep(req.waitInSeconds)
 
-        challenge_res.response = driver.page_source
+        challenge_res.response = await tab.page_source
 
     if req.returnScreenshot:
-        challenge_res.screenshot = driver.get_screenshot_as_base64()
+        challenge_res.screenshot = await tab.take_screenshot(as_base64=True)
 
     res.result = challenge_res
     return res
 
 
-def _post_request(req: V1RequestBase, driver: WebDriver):
+async def _click_verify_pydoll(tab: Tab):
+    """Try to click the Cloudflare verify checkbox using pydoll's human-like interactions."""
+    try:
+        # Try to find the cf-turnstile element
+        try:
+            element = await tab.find(class_name='cf-turnstile', timeout=2, raise_exc=False)
+            if element:
+                # Adjust the external div size to shadow root width (usually 300px)
+                await element.execute_script('this.style="width: 300px"')
+                await asyncio.sleep(2)
+                # Click with pydoll's human-like click
+                await element.click()
+                return
+        except Exception:
+            pass
+
+        # Try alternative: find iframe and click inside it
+        try:
+            iframe = await tab.query('iframe[src*="challenges.cloudflare.com"]', timeout=1, raise_exc=False)
+            if iframe:
+                await iframe.click()
+                return
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+async def _resolve_turnstile_captcha(req: V1RequestBase, tab: Tab) -> Optional[str]:
+    """Resolve Turnstile captcha and return the token."""
+    turnstile_token = None
+    if req.tabs_till_verify is not None:
+        await _navigate_with_cf_bypass(tab, req.url)
+
+        turnstile_challenge_found = False
+        for selector in TURNSTILE_SELECTORS:
+            try:
+                element = await tab.query(selector, timeout=2, raise_exc=False)
+                if element:
+                    turnstile_challenge_found = True
+                    logging.info("Turnstile challenge detected")
+                    break
+            except Exception:
+                pass
+
+        if turnstile_challenge_found:
+            turnstile_token = await _get_turnstile_token(tab, req.tabs_till_verify)
+    return turnstile_token
+
+
+async def _get_turnstile_token(tab: Tab, tabs: int) -> Optional[str]:
+    """Get the turnstile token by clicking the checkbox."""
+    try:
+        token_input = await tab.query("input[name='cf-turnstile-response']", timeout=5)
+        current_value_result = await token_input.execute_script('return this.value')
+        current_value = current_value_result.get('result', {}).get('result', {}).get('value', '')
+
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            await _click_verify_pydoll(tab)
+
+            # Check if token changed
+            token_result = await token_input.execute_script('return this.value')
+            turnstile_token = token_result.get('result', {}).get('result', {}).get('value', '')
+
+            if turnstile_token and turnstile_token != current_value:
+                logging.info("Turnstile token obtained")
+                return turnstile_token
+
+            # Reset focus
+            await tab.execute_script("""
+                let el = document.createElement('button');
+                el.style.position='fixed';
+                el.style.top='0';
+                el.style.left='0';
+                document.body.prepend(el);
+                el.focus();
+            """)
+            await asyncio.sleep(1)
+
+    except Exception as e:
+        logging.error(f"Error getting turnstile token: {e}")
+
+    return None
+
+
+async def _post_request(req: V1RequestBase, tab: Tab):
+    """Perform a POST request by creating a form and submitting it."""
     post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
     query_string = req.postData if req.postData and req.postData[0] != '?' else req.postData[1:] if req.postData else ''
     pairs = query_string.split('&')
     for pair in pairs:
         parts = pair.split('=', 1)
-        # noinspection PyBroadException
         try:
             name = unquote(parts[0])
         except Exception:
             name = parts[0]
         if name == 'submit':
             continue
-        # noinspection PyBroadException
         try:
             value = unquote(parts[1]) if len(parts) > 1 else ''
         except Exception:
             value = parts[1] if len(parts) > 1 else ''
         # Protection of " character, for syntax
-        value=value.replace('"','&quot;')
+        value = value.replace('"', '&quot;')
         post_form += f'<input type="text" name="{escape(quote(name))}" value="{escape(quote(value))}"><br>'
     post_form += '</form>'
     html_content = f"""
@@ -545,4 +674,4 @@ def _post_request(req: V1RequestBase, driver: WebDriver):
             <script>document.getElementById('hackForm').submit();</script>
         </body>
         </html>"""
-    driver.get("data:text/html;charset=utf-8,{html_content}".format(html_content=html_content))
+    await tab.go_to("data:text/html;charset=utf-8,{html_content}".format(html_content=html_content))

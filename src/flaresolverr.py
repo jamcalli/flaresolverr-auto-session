@@ -120,10 +120,10 @@ if __name__ == "__main__":
             ]
         )
 
-    # disable warning traces from urllib3
+    # disable warning traces from urllib3 and pydoll
     logging.getLogger('urllib3').setLevel(logging.ERROR)
-    logging.getLogger('selenium.webdriver.remote.remote_connection').setLevel(logging.WARNING)
-    logging.getLogger('undetected_chromedriver').setLevel(logging.WARNING)
+    logging.getLogger('pydoll').setLevel(logging.WARNING)
+    logging.getLogger('websockets').setLevel(logging.WARNING)
 
     logging.info(f'FlareSolverr {utils.get_flaresolverr_version()}')
     logging.debug('Debug log enabled')
