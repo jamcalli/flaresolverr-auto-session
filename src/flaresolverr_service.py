@@ -104,14 +104,16 @@ async def _navigate_with_cf_bypass(tab: Tab, url: str, has_cf_cookie: bool = Fal
 
     # Try to solve challenge if detected
     if cf_challenge:
-        logging.info(f"Cloudflare challenge detected (title: {page_title}), solving...")
+        logging.info(f"Cloudflare challenge detected (title: {page_title}), attempting bypass...")
         try:
             async with tab.expect_and_bypass_cloudflare_captcha(
                 time_before_click=2,
                 time_to_wait_captcha=15,
             ):
                 await asyncio.wait_for(tab.go_to(url), timeout=30)
-            logging.info("Cloudflare challenge solved")
+            # Note: pydoll's bypass exits successfully even if it didn't find/click the captcha
+            # The actual success is verified below by checking if challenge title changed
+            logging.debug("Pydoll bypass context exited (does not guarantee success)")
         except asyncio.TimeoutError:
             logging.warning("Cloudflare bypass navigation timed out")
         except Exception as e:
@@ -305,7 +307,7 @@ def cleanup_auto_sessions() -> int:
 
 def _get_cookie_file_for_url(url: str) -> Optional[str]:
     """Get a cookie file path for cookie persistence based on domain."""
-    auto_session_enabled = os.environ.get('AUTO_SESSION_MANAGEMENT', 'false').lower() == 'true'
+    auto_session_enabled = utils.get_env_bool('AUTO_SESSION_MANAGEMENT', False)
     if not auto_session_enabled:
         return None
 
@@ -580,6 +582,16 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
             try:
                 attempt = attempt + 1
 
+                # On first few attempts, log more detail about what's on the page
+                if attempt <= 3:
+                    try:
+                        # Check for turnstile/iframe elements
+                        turnstile = await tab.query('.cf-turnstile', timeout=0, raise_exc=False)
+                        iframe = await tab.query('iframe[src*="challenges.cloudflare.com"]', timeout=0, raise_exc=False)
+                        logging.debug(f"Challenge page state: cf-turnstile={turnstile is not None}, cf-iframe={iframe is not None}")
+                    except Exception as e:
+                        logging.debug(f"Error checking challenge elements: {e}")
+
                 # Wait for title to change
                 logging.debug("Waiting for challenge to complete (attempt " + str(attempt) + "/" + str(max_challenge_attempts) + ")")
 
@@ -621,6 +633,16 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
 
         if attempt >= max_challenge_attempts:
             logging.error(f"Challenge solving failed after {max_challenge_attempts} attempts")
+            # Save debug screenshot on failure
+            try:
+                screenshot_path = '/tmp/flaresolverr-challenge-fail.png'
+                screenshot_b64 = await tab.take_screenshot(as_base64=True)
+                import base64
+                with open(screenshot_path, 'wb') as f:
+                    f.write(base64.b64decode(screenshot_b64))
+                logging.error(f"Debug screenshot saved to {screenshot_path}")
+            except Exception as e:
+                logging.debug(f"Could not save debug screenshot: {e}")
             raise Exception(f"Challenge solving failed after {max_challenge_attempts} attempts - Cloudflare may be blocking this request")
 
         logging.info("Challenge solved!")
@@ -680,29 +702,50 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
 async def _click_verify_pydoll(tab: Tab):
     """Try to click the Cloudflare verify checkbox using pydoll's human-like interactions."""
     try:
-        # Try to find the cf-turnstile element
-        try:
-            element = await tab.find(class_name='cf-turnstile', timeout=2, raise_exc=False)
-            if element:
-                # Adjust the external div size to shadow root width (usually 300px)
-                await element.execute_script('this.style="width: 300px"')
-                await asyncio.sleep(2)
-                # Click with pydoll's human-like click
-                await element.click()
-                return
-        except Exception:
-            pass
+        # Try multiple selectors for Cloudflare challenge elements
+        selectors_to_try = [
+            ('class', 'cf-turnstile'),
+            ('css', '#turnstile-wrapper'),
+            ('css', 'input[type="checkbox"]'),
+            ('css', '.ctp-checkbox-label'),
+            ('css', '#challenge-stage'),
+        ]
 
-        # Try alternative: find iframe and click inside it
+        for selector_type, selector_value in selectors_to_try:
+            try:
+                if selector_type == 'class':
+                    element = await tab.find(class_name=selector_value, timeout=1, raise_exc=False)
+                else:
+                    element = await tab.query(selector_value, timeout=1, raise_exc=False)
+
+                if element:
+                    logging.debug(f"Found element with {selector_type}={selector_value}, attempting click...")
+                    # Adjust the external div size to shadow root width (usually 300px)
+                    try:
+                        await element.execute_script('this.style="width: 300px"')
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1)
+                    await element.click()
+                    logging.debug(f"Clicked element with {selector_type}={selector_value}")
+                    return
+            except Exception as e:
+                logging.debug(f"Error with selector {selector_type}={selector_value}: {e}")
+
+        # Try iframe-based approach
         try:
             iframe = await tab.query('iframe[src*="challenges.cloudflare.com"]', timeout=1, raise_exc=False)
             if iframe:
+                logging.debug("Found cloudflare iframe, attempting click...")
                 await iframe.click()
+                logging.debug("Clicked cloudflare iframe")
                 return
-        except Exception:
-            pass
-    except Exception:
-        pass
+            else:
+                logging.debug("No Cloudflare elements found on page")
+        except Exception as e:
+            logging.debug(f"Error finding/clicking iframe: {e}")
+    except Exception as e:
+        logging.debug(f"Unexpected error in _click_verify_pydoll: {e}")
 
 
 async def _resolve_turnstile_captcha(req: V1RequestBase, tab: Tab) -> Optional[str]:
