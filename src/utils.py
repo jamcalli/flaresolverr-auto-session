@@ -19,16 +19,24 @@ USER_AGENT = None
 XVFB_DISPLAY = None
 
 
+def get_env_bool(name: str, default: bool = False) -> bool:
+    """Parse boolean environment variable, handling quoted values and various formats."""
+    val = os.environ.get(name, str(default).lower())
+    # Strip quotes that users might accidentally include in docker-compose
+    val = val.strip().strip('"').strip("'").lower()
+    return val in ('true', '1', 'yes', 'on')
+
+
 def get_config_log_html() -> bool:
-    return os.environ.get('LOG_HTML', 'false').lower() == 'true'
+    return get_env_bool('LOG_HTML', False)
 
 
 def get_config_headless() -> bool:
-    return os.environ.get('HEADLESS', 'true').lower() == 'true'
+    return get_env_bool('HEADLESS', True)
 
 
 def get_config_disable_media() -> bool:
-    return os.environ.get('DISABLE_MEDIA', 'false').lower() == 'true'
+    return get_env_bool('DISABLE_MEDIA', False)
 
 
 def get_flaresolverr_version() -> str:

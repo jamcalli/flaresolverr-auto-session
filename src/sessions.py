@@ -93,8 +93,8 @@ class SessionsStorage:
     def __init__(self):
         self.sessions = {}
         self.domain_sessions = {}  # domain -> session_id mapping for auto sessions
-        self.auto_session_enabled = os.environ.get('AUTO_SESSION_MANAGEMENT', 'false').lower() == 'true'
-        self.session_per_domain = os.environ.get('SESSION_PER_DOMAIN', 'true').lower() == 'true'
+        self.auto_session_enabled = utils.get_env_bool('AUTO_SESSION_MANAGEMENT', False)
+        self.session_per_domain = utils.get_env_bool('SESSION_PER_DOMAIN', True)
         self.auto_session_ttl = int(os.environ.get('AUTO_SESSION_TTL', '30'))
         self.max_auto_sessions = int(os.environ.get('MAX_AUTO_SESSIONS', '10'))
         self._lock = threading.RLock()  # Reentrant lock for nested calls

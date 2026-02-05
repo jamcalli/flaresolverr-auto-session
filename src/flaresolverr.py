@@ -129,10 +129,10 @@ if __name__ == "__main__":
     logging.debug('Debug log enabled')
 
     # Log auto-session configuration
-    auto_session_enabled = os.environ.get('AUTO_SESSION_MANAGEMENT', 'false').lower() == 'true'
+    auto_session_enabled = utils.get_env_bool('AUTO_SESSION_MANAGEMENT', False)
     if auto_session_enabled:
         logging.info('Automatic session management: ENABLED')
-        logging.info(f'  Session per domain: {os.environ.get("SESSION_PER_DOMAIN", "true")}')
+        logging.info(f'  Session per domain: {utils.get_env_bool("SESSION_PER_DOMAIN", True)}')
         logging.info(f'  Session TTL: {os.environ.get("AUTO_SESSION_TTL", "30")} minutes')
         logging.info(f'  Max auto sessions: {os.environ.get("MAX_AUTO_SESSIONS", "10")}')
     else:
