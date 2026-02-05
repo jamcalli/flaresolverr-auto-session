@@ -1,0 +1,252 @@
+2026-02-05 22:22:34.4249 Info Starting Jackett v0.24.1027
+2026-02-05 22:22:34.6879 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:22:34.6905 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:22:34.6920 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:22:34.6924 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:22:34.6924 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:22:34.6938 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:22:34.6938 Info App config/log directory: /config/Jackett
+2026-02-05 22:22:34.6947 Info Using proxy: Disabled
+2026-02-05 22:22:34.6947 Info Using FlareSolverr: No
+2026-02-05 22:22:34.6963 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:22:34.6998 Info Loading Native indexers ...
+2026-02-05 22:22:34.7774 Info Loaded 72 Native indexers.
+2026-02-05 22:22:34.8059 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:22:36.1775 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:22:36.1775 Info Loaded 612 indexers in total
+2026-02-05 22:22:36.1937 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:22:36.1969 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:22:36.1972 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:22:36.1972 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:22:36.2648 Warn No XML encryptor configured. Key {bd5723d6-d4a3-4467-9e80-9e3003ae6902} may be persisted to storage in unencrypted form.
+2026-02-05 22:22:36.2859 Info Jackett startup finished in 1.995 s
+2026-02-05 22:23:21.6820 Info Jackett stopped
+2026-02-05 22:24:39.5340 Info Starting Jackett v0.24.1027
+2026-02-05 22:24:39.7338 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:24:39.7358 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:24:39.7372 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:24:39.7372 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:24:39.7378 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:24:39.7378 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:24:39.7378 Info App config/log directory: /config/Jackett
+2026-02-05 22:24:39.7390 Info Using proxy: Disabled
+2026-02-05 22:24:39.7390 Info Using FlareSolverr: No
+2026-02-05 22:24:39.7400 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:24:39.7412 Info Loading Native indexers ...
+2026-02-05 22:24:39.7547 Info Loaded 72 Native indexers.
+2026-02-05 22:24:39.7564 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:24:41.1082 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:24:41.1088 Info Loaded 612 indexers in total
+2026-02-05 22:24:41.1288 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:24:41.1324 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:24:41.1329 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:24:41.1329 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:24:41.1994 Info Jackett startup finished in 1.756 s
+2026-02-05 22:24:44.0064 Info Jackett stopped
+2026-02-05 22:25:13.9902 Info Starting Jackett v0.24.1027
+2026-02-05 22:25:14.2480 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:25:14.2503 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:25:14.2517 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:25:14.2517 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:25:14.2534 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:25:14.2541 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:25:14.2541 Info App config/log directory: /config/Jackett
+2026-02-05 22:25:14.2551 Info Using proxy: Disabled
+2026-02-05 22:25:14.2551 Info Using FlareSolverr: No
+2026-02-05 22:25:14.2575 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:25:14.2590 Info Loading Native indexers ...
+2026-02-05 22:25:14.2720 Info Loaded 72 Native indexers.
+2026-02-05 22:25:14.2732 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:25:15.3875 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:25:15.3879 Info Loaded 612 indexers in total
+2026-02-05 22:25:15.4021 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:25:15.4053 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:25:15.4058 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:25:15.4058 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:25:15.4663 Info Jackett startup finished in 1.592 s
+2026-02-05 22:26:02.5285 Info Jackett stopped
+2026-02-05 22:27:38.7014 Info Starting Jackett v0.24.1027
+2026-02-05 22:27:38.9236 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:27:38.9257 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:27:38.9274 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:27:38.9274 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:27:38.9283 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:27:38.9283 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:27:38.9294 Info App config/log directory: /config/Jackett
+2026-02-05 22:27:38.9303 Info Using proxy: Disabled
+2026-02-05 22:27:38.9303 Info Using FlareSolverr: No
+2026-02-05 22:27:38.9322 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:27:38.9335 Info Loading Native indexers ...
+2026-02-05 22:27:38.9459 Info Loaded 72 Native indexers.
+2026-02-05 22:27:38.9471 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:27:40.0667 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:27:40.0672 Info Loaded 612 indexers in total
+2026-02-05 22:27:40.0847 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:27:40.0879 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:27:40.0882 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:27:40.0882 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:27:40.1472 Info Jackett startup finished in 1.537 s
+2026-02-05 22:27:40.6509 Info Jackett stopped
+2026-02-05 22:29:23.7347 Info Starting Jackett v0.24.1027
+2026-02-05 22:29:24.0237 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:29:24.0259 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:29:24.0277 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:29:24.0277 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:29:24.0300 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:29:24.0306 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:29:24.0306 Info App config/log directory: /config/Jackett
+2026-02-05 22:29:24.0317 Info Using proxy: Disabled
+2026-02-05 22:29:24.0317 Info Using FlareSolverr: No
+2026-02-05 22:29:24.0329 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:29:24.0345 Info Loading Native indexers ...
+2026-02-05 22:29:24.0475 Info Loaded 72 Native indexers.
+2026-02-05 22:29:24.0489 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:29:25.4107 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:29:25.4107 Info Loaded 612 indexers in total
+2026-02-05 22:29:25.4564 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:29:25.4618 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:29:25.4629 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:29:25.4638 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:29:25.6027 Info Jackett startup finished in 2.012 s
+2026-02-05 22:30:52.5343 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:30:52.5360 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:30:52.5364 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:30:52.5364 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:30:53.0420 Info Restarting webhost due to configuration change
+2026-02-05 22:30:53.0420 Info Restart of the web application host (not process) initiated
+2026-02-05 22:30:53.0558 Info Jackett stopped
+2026-02-05 22:30:53.0842 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:30:53.0846 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:30:53.0846 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:30:53.0854 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:30:53.0854 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:30:53.0854 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:30:53.0863 Info App config/log directory: /config/Jackett
+2026-02-05 22:30:53.0863 Info Using proxy: Disabled
+2026-02-05 22:30:53.0863 Info Using FlareSolverr: http://flaresolverr
+2026-02-05 22:30:53.0873 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:30:53.0873 Info Loading Native indexers ...
+2026-02-05 22:30:53.0947 Info Loaded 72 Native indexers.
+2026-02-05 22:30:53.0947 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:30:53.6442 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:30:53.6447 Info Loaded 612 indexers in total
+2026-02-05 22:30:53.6752 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:30:53.6752 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:30:53.6764 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:30:53.6764 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:30:53.6944 Info Jackett startup finished in 90.107 s
+2026-02-05 22:31:12.7312 Error Jackett.Common.IndexerException: Exception (1337x): Error connecting to FlareSolverr server: System.Net.Http.HttpRequestException: Connection refused (flaresolverr:80)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at FlareSolverrSharp.Solvers.FlareSolverr.<>c__DisplayClass12_0.<<SendFlareSolverrRequest>b__0>d.MoveNext()
+
+[v0.24.1027.0] Jackett.Common.IndexerException: Exception (1337x): Error connecting to FlareSolverr server: System.Net.Http.HttpRequestException: Connection refused (flaresolverr:80)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at FlareSolverrSharp.Solvers.FlareSolverr.<>c__DisplayClass12_0.<<SendFlareSolverrRequest>b__0>d.MoveNext()
+ ---> FlareSolverrSharp.Exceptions.FlareSolverrException: Error connecting to FlareSolverr server: System.Net.Http.HttpRequestException: Connection refused (flaresolverr:80)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at FlareSolverrSharp.Solvers.FlareSolverr.<>c__DisplayClass12_0.<<SendFlareSolverrRequest>b__0>d.MoveNext()
+   at FlareSolverrSharp.Solvers.FlareSolverr.<>c__DisplayClass12_0.<<SendFlareSolverrRequest>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at FlareSolverrSharp.Utilities.SemaphoreLocker.LockAsync[T](Func`1 worker)
+   at FlareSolverrSharp.Solvers.FlareSolverr.SendFlareSolverrRequest(HttpContent flareSolverrRequest)
+   at FlareSolverrSharp.Solvers.FlareSolverr.Solve(HttpRequestMessage request, String sessionId)
+   at FlareSolverrSharp.ClearanceHandler.SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Jackett.Common.Utils.Clients.HttpWebClient2.Run(WebRequest webRequest) in ./Jackett.Common/Utils/Clients/HttpWebClient2.cs:line 174
+   at Jackett.Common.Utils.Clients.WebClient.GetResultAsync(WebRequest request) in ./Jackett.Common/Utils/Clients/WebClient.cs:line 188
+   at Jackett.Common.Indexers.BaseWebIndexer.RequestWithCookiesAsync(String url, String cookieOverride, RequestType method, String referer, IEnumerable`1 data, Dictionary`2 headers, String rawbody, Nullable`1 emulateBrowser) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 617
+   at Jackett.Common.Indexers.Definitions.CardigannIndexer.PerformQuery(TorznabQuery query) in ./Jackett.Common/Indexers/Definitions/CardigannIndexer.cs:line 1564
+   at Jackett.Common.Indexers.BaseIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 378
+   --- End of inner exception stack trace ---
+   at Jackett.Common.Indexers.BaseIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 403
+   at Jackett.Common.Indexers.BaseWebIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 816
+   at Jackett.Server.Controllers.ResultsController.Results(ApiSearch requestt) in ./Jackett.Server/Controllers/ResultsController.cs:line 256
+
+2026-02-05 22:31:12.7776 Info Manual search in 1337x for batman => Found 0 releases [219ms]
+2026-02-05 22:31:31.0579 Info Restarting webhost due to configuration change
+2026-02-05 22:31:31.0605 Info Restart of the web application host (not process) initiated
+2026-02-05 22:31:31.0756 Info Jackett stopped
+2026-02-05 22:31:31.1154 Info Environment version: 9.0.12 (/app/Jackett/)
+2026-02-05 22:31:31.1160 Info OS version: Unix 6.12.54.0 (64bit OS) (64bit process)
+2026-02-05 22:31:31.1169 Info Jackett variant: CoreLinuxMuslArm64
+2026-02-05 22:31:31.1169 Info File /etc/issue: Welcome to Alpine Linux 3.22
+2026-02-05 22:31:31.1189 Info Running in Docker: Yes (image build: v0.24.1027-ls301)
+2026-02-05 22:31:31.1189 Info ThreadPool MaxThreads: 32767 workerThreads, 1000 completionPortThreads
+2026-02-05 22:31:31.1198 Info App config/log directory: /config/Jackett
+2026-02-05 22:31:31.1198 Info Using proxy: Disabled
+2026-02-05 22:31:31.1206 Info Using FlareSolverr: http://flaresolverr:8191
+2026-02-05 22:31:31.1217 Info Using HTTP Client: HttpWebClient2
+2026-02-05 22:31:31.1217 Info Loading Native indexers ...
+2026-02-05 22:31:31.1313 Info Loaded 72 Native indexers.
+2026-02-05 22:31:31.1318 Info Loading Cardigann indexers from: /config/cardigann/definitions/, /etc/xdg/cardigan/definitions/, /app/Jackett/Definitions
+2026-02-05 22:31:31.4724 Info Loaded 540 Cardigann indexers.
+2026-02-05 22:31:31.4727 Info Loaded 612 indexers in total
+2026-02-05 22:31:31.4924 Info Adding aggregate indexer ('all' indexer) ...
+2026-02-05 22:31:31.4928 Info Adding filter indexer ('type:public' indexer) ...
+2026-02-05 22:31:31.4928 Info Adding filter indexer ('type:private' indexer) ...
+2026-02-05 22:31:31.4928 Info Adding filter indexer ('type:semi-public' indexer) ...
+2026-02-05 22:31:31.5037 Info Jackett startup finished in 127.917 s
+2026-02-05 22:32:35.9514 Error Jackett.Common.IndexerException: Exception (1337x): FlareSolverr was unable to process the request, please check FlareSolverr logs. Message: Error: Error solving the challenge. Timeout after 55.0 seconds.
+
+[v0.24.1027.0] Jackett.Common.IndexerException: Exception (1337x): FlareSolverr was unable to process the request, please check FlareSolverr logs. Message: Error: Error solving the challenge. Timeout after 55.0 seconds.
+ ---> FlareSolverrSharp.Exceptions.FlareSolverrException: FlareSolverr was unable to process the request, please check FlareSolverr logs. Message: Error: Error solving the challenge. Timeout after 55.0 seconds.
+   at FlareSolverrSharp.Solvers.FlareSolverr.<>c__DisplayClass12_0.<<SendFlareSolverrRequest>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at FlareSolverrSharp.Utilities.SemaphoreLocker.LockAsync[T](Func`1 worker)
+   at FlareSolverrSharp.Solvers.FlareSolverr.SendFlareSolverrRequest(HttpContent flareSolverrRequest)
+   at FlareSolverrSharp.Solvers.FlareSolverr.Solve(HttpRequestMessage request, String sessionId)
+   at FlareSolverrSharp.ClearanceHandler.SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Jackett.Common.Utils.Clients.HttpWebClient2.Run(WebRequest webRequest) in ./Jackett.Common/Utils/Clients/HttpWebClient2.cs:line 174
+   at Jackett.Common.Utils.Clients.WebClient.GetResultAsync(WebRequest request) in ./Jackett.Common/Utils/Clients/WebClient.cs:line 188
+   at Jackett.Common.Indexers.BaseWebIndexer.RequestWithCookiesAsync(String url, String cookieOverride, RequestType method, String referer, IEnumerable`1 data, Dictionary`2 headers, String rawbody, Nullable`1 emulateBrowser) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 617
+   at Jackett.Common.Indexers.Definitions.CardigannIndexer.PerformQuery(TorznabQuery query) in ./Jackett.Common/Indexers/Definitions/CardigannIndexer.cs:line 1564
+   at Jackett.Common.Indexers.BaseIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 378
+   --- End of inner exception stack trace ---
+   at Jackett.Common.Indexers.BaseIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 403
+   at Jackett.Common.Indexers.BaseWebIndexer.ResultsForQuery(TorznabQuery query, Boolean isMetaIndexer) in ./Jackett.Common/Indexers/BaseIndexer.cs:line 816
+   at Jackett.Server.Controllers.ResultsController.Results(ApiSearch requestt) in ./Jackett.Server/Controllers/ResultsController.cs:line 256
+
+2026-02-05 22:32:36.0356 Info Manual search in 1337x for batman => Found 0 releases [55311ms]
