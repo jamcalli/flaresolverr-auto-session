@@ -87,6 +87,10 @@ async def get_browser_and_tab(proxy: dict = None, user_data_dir: str = None) -> 
     # Anti-detection flags
     options.add_argument('--disable-blink-features=AutomationControlled')
 
+    # Disable WebRTC to prevent real IP leak when using proxy
+    options.add_argument('--disable-webrtc')
+    options.add_argument('--webrtc-ip-handling-policy=disable_non_proxied_udp')
+
     # Stealth browser preferences (simulate aged profile)
     import time as _time
     current_time = int(_time.time())
