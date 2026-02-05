@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import platform
@@ -18,6 +19,9 @@ from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
                   ChallengeResolutionT, HealthResponse, IndexResponse,
                   V1RequestBase, V1ResponseBase)
 from sessions import SessionsStorage, run_in_background_loop
+
+# Track whether we've run diagnostics this session (only need once)
+_diagnostics_logged = False
 
 # Base directory for user data dirs (cookie persistence)
 USER_DATA_BASE_DIR = os.environ.get('USER_DATA_DIR', '/tmp/flaresolverr-sessions')
@@ -54,6 +58,7 @@ TURNSTILE_SELECTORS = [
 ]
 
 SHORT_TIMEOUT = 1
+CHALLENGE_RELOAD_AFTER = 10  # Reload page after this many stuck challenge attempts
 SESSIONS_STORAGE = SessionsStorage()
 
 
@@ -118,6 +123,104 @@ async def _navigate_with_cf_bypass(tab: Tab, url: str, has_cf_cookie: bool = Fal
             logging.warning("Cloudflare bypass navigation timed out")
         except Exception as e:
             logging.debug(f"Cloudflare bypass error: {e}")
+
+
+async def _log_browser_diagnostics(tab: Tab):
+    """Log browser fingerprint properties for debugging environment differences."""
+    try:
+        diag_js = """
+        (function() {
+            var d = {};
+            try { d.userAgent = navigator.userAgent; } catch(e) { d.userAgent = 'error'; }
+            try { d.platform = navigator.platform; } catch(e) { d.platform = 'error'; }
+            try { d.hardwareConcurrency = navigator.hardwareConcurrency; } catch(e) { d.hardwareConcurrency = 'error'; }
+            try { d.deviceMemory = navigator.deviceMemory; } catch(e) { d.deviceMemory = 'N/A'; }
+            try { d.languages = navigator.languages.join(','); } catch(e) { d.languages = 'error'; }
+            try { d.pluginCount = navigator.plugins.length; } catch(e) { d.pluginCount = 'error'; }
+            try { d.screenRes = screen.width + 'x' + screen.height; } catch(e) { d.screenRes = 'error'; }
+            try { d.colorDepth = screen.colorDepth; } catch(e) { d.colorDepth = 'error'; }
+            try { d.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) { d.timezone = 'error'; }
+            try {
+                var canvas = document.createElement('canvas');
+                var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    d.webglVendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'no debug ext';
+                    d.webglRenderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'no debug ext';
+                } else { d.webglVendor = 'no webgl'; d.webglRenderer = 'no webgl'; }
+            } catch(e) { d.webglVendor = 'error'; d.webglRenderer = 'error'; }
+            try {
+                var c = document.createElement('canvas');
+                c.width = 200; c.height = 50;
+                var ctx = c.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(0, 0, 200, 50);
+                ctx.fillStyle = '#069';
+                ctx.fillText('fingerprint', 2, 15);
+                d.canvasHash = c.toDataURL().length;
+            } catch(e) { d.canvasHash = 'error'; }
+            try { d.webdriver = navigator.webdriver; } catch(e) { d.webdriver = 'error'; }
+            try { d.maxTouchPoints = navigator.maxTouchPoints; } catch(e) { d.maxTouchPoints = 'error'; }
+            return JSON.stringify(d);
+        })()
+        """
+        result = await tab.execute_script(diag_js)
+        diag_str = result.get('result', {}).get('result', {}).get('value', '{}')
+        diag = json.loads(diag_str)
+        logging.info(f"Browser diagnostics: platform={diag.get('platform')}, "
+                     f"cores={diag.get('hardwareConcurrency')}, "
+                     f"memory={diag.get('deviceMemory')}GB, "
+                     f"screen={diag.get('screenRes')}, "
+                     f"webdriver={diag.get('webdriver')}, "
+                     f"webgl={diag.get('webglRenderer')}, "
+                     f"canvas_len={diag.get('canvasHash')}, "
+                     f"plugins={diag.get('pluginCount')}, "
+                     f"tz={diag.get('timezone')}, "
+                     f"langs={diag.get('languages')}, "
+                     f"touch={diag.get('maxTouchPoints')}")
+    except Exception as e:
+        logging.warning(f"Could not collect browser diagnostics: {e}")
+
+
+async def _verify_proxy(tab: Tab, expected_proxy: dict = None):
+    """Check the browser's apparent external IP to verify proxy is working."""
+    try:
+        # Navigate to a lightweight IP check endpoint
+        await asyncio.wait_for(tab.go_to('https://httpbin.org/ip'), timeout=15)
+        await asyncio.sleep(1)
+
+        result = await tab.execute_script('return document.body.innerText')
+        body = result.get('result', {}).get('result', {}).get('value', '')
+        try:
+            ip_data = json.loads(body)
+            external_ip = ip_data.get('origin', 'unknown')
+        except (json.JSONDecodeError, ValueError):
+            external_ip = body.strip()[:100]
+
+        logging.info(f"Proxy verification: external IP = {external_ip}")
+        if expected_proxy and expected_proxy.get('url'):
+            logging.info(f"Proxy verification: configured proxy = {expected_proxy['url']}")
+
+        # Navigate back to blank page to clean state
+        await tab.go_to('about:blank')
+        await asyncio.sleep(0.5)
+        return external_ip
+    except asyncio.TimeoutError:
+        logging.warning("Proxy verification: timeout checking external IP (proxy may be blocking httpbin)")
+        try:
+            await tab.go_to('about:blank')
+        except Exception:
+            pass
+        return None
+    except Exception as e:
+        logging.warning(f"Proxy verification: error checking external IP: {e}")
+        try:
+            await tab.go_to('about:blank')
+        except Exception:
+            pass
+        return None
 
 
 def test_browser_installation():
@@ -486,6 +589,14 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
     res.status = STATUS_OK
     res.message = ""
 
+    # Run diagnostics on first request (proxy verification + browser fingerprint)
+    global _diagnostics_logged
+    if not _diagnostics_logged:
+        _diagnostics_logged = True
+        logging.info("Running first-request diagnostics...")
+        await _verify_proxy(tab, req.proxy)
+        await _log_browser_diagnostics(tab)
+
     # Restore saved cookies BEFORE navigation using CDP (for file-based sessions)
     if saved_cookies:
         try:
@@ -576,23 +687,22 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
                 pass
 
     attempt = 0
+    has_reloaded = False
     max_challenge_attempts = 30  # Max attempts before giving up (~30 seconds with 1s sleep)
     if challenge_found:
         while attempt < max_challenge_attempts:
             try:
                 attempt = attempt + 1
 
-                # On first few attempts, log more detail about what's on the page
-                if attempt <= 3:
+                # Check for turnstile/iframe elements (detailed on first few + after reload)
+                if attempt <= 3 or (has_reloaded and attempt == CHALLENGE_RELOAD_AFTER + 1):
                     try:
-                        # Check for turnstile/iframe elements
                         turnstile = await tab.query('.cf-turnstile', timeout=0, raise_exc=False)
                         iframe = await tab.query('iframe[src*="challenges.cloudflare.com"]', timeout=0, raise_exc=False)
                         logging.debug(f"Challenge page state: cf-turnstile={turnstile is not None}, cf-iframe={iframe is not None}")
                     except Exception as e:
                         logging.debug(f"Error checking challenge elements: {e}")
 
-                # Wait for title to change
                 logging.debug("Waiting for challenge to complete (attempt " + str(attempt) + "/" + str(max_challenge_attempts) + ")")
 
                 # Check if challenge is still present
@@ -622,6 +732,33 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
                     # Challenge resolved
                     break
 
+                # Recovery: after CHALLENGE_RELOAD_AFTER stuck attempts, try re-navigating
+                # with the bypass context (the JS challenge may have stalled)
+                if attempt == CHALLENGE_RELOAD_AFTER and not has_reloaded:
+                    has_reloaded = True
+                    logging.warning(f"Challenge stuck after {attempt} attempts, re-navigating with bypass...")
+                    # Dump page excerpt for debugging
+                    try:
+                        html_result = await tab.execute_script(
+                            'return document.documentElement.outerHTML.substring(0, 2000)')
+                        page_excerpt = html_result.get('result', {}).get('result', {}).get('value', '')
+                        logging.debug(f"Stuck challenge page excerpt: {page_excerpt[:500]}")
+                    except Exception:
+                        pass
+                    # Try a fresh navigation with bypass
+                    try:
+                        async with tab.expect_and_bypass_cloudflare_captcha(
+                            time_before_click=2,
+                            time_to_wait_captcha=15,
+                        ):
+                            await asyncio.wait_for(tab.go_to(req.url), timeout=30)
+                        logging.debug("Re-navigation bypass context exited")
+                    except asyncio.TimeoutError:
+                        logging.warning("Re-navigation bypass timed out")
+                    except Exception as e:
+                        logging.debug(f"Re-navigation bypass error: {e}")
+                    continue
+
                 # Try to click the Cloudflare verify checkbox using pydoll's method
                 await _click_verify_pydoll(tab)
 
@@ -633,11 +770,19 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
 
         if attempt >= max_challenge_attempts:
             logging.error(f"Challenge solving failed after {max_challenge_attempts} attempts")
-            # Save debug screenshot on failure
+            # Dump page content for debugging
             try:
-                screenshot_path = '/tmp/flaresolverr-challenge-fail.png'
+                html_result = await tab.execute_script(
+                    'return document.documentElement.outerHTML.substring(0, 5000)')
+                page_content = html_result.get('result', {}).get('result', {}).get('value', '')
+                logging.error(f"Failed challenge page content (first 2000 chars): {page_content[:2000]}")
+            except Exception as e:
+                logging.debug(f"Could not dump page content: {e}")
+            # Save debug screenshot
+            try:
                 screenshot_b64 = await tab.take_screenshot(as_base64=True)
                 import base64
+                screenshot_path = '/tmp/flaresolverr-challenge-fail.png'
                 with open(screenshot_path, 'wb') as f:
                     f.write(base64.b64decode(screenshot_b64))
                 logging.error(f"Debug screenshot saved to {screenshot_path}")

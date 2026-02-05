@@ -151,7 +151,7 @@ async def get_browser_and_tab(proxy: dict = None, user_data_dir: str = None) -> 
 
     # Headless mode - use --headless=new for Chrome 109+
     # OR use xvfb for better anti-detection (virtual display instead of true headless)
-    use_xvfb = os.environ.get('USE_XVFB', 'false').lower() == 'true'
+    use_xvfb = get_env_bool('USE_XVFB', False)
 
     if get_config_headless():
         if use_xvfb:
