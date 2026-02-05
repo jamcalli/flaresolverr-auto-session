@@ -30,7 +30,7 @@ RUN dpkg -i /libgl1-mesa-dri.deb \
     # Install dependencies (no chromedriver needed - pydoll uses CDP directly)
     && apt-get update \
     && apt-get install -y --no-install-recommends chromium chromium-common xvfb dumb-init \
-        procps curl vim xauth \
+        procps curl vim xauth x11vnc novnc websockify \
     # Remove temporary files and hardware decoding libraries
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/x86_64-linux-gnu/libmfxhw* \
@@ -42,7 +42,10 @@ RUN dpkg -i /libgl1-mesa-dri.deb \
     && mkdir /config \
     && chown flaresolverr:flaresolverr /config \
     && mkdir -p /tmp/flaresolverr-sessions \
-    && chown flaresolverr:flaresolverr /tmp/flaresolverr-sessions
+    && chown flaresolverr:flaresolverr /tmp/flaresolverr-sessions \
+    && mkdir -p /tmp/.X11-unix \
+    && chown root:root /tmp/.X11-unix \
+    && chmod 1777 /tmp/.X11-unix
 
 VOLUME /config
 
@@ -52,15 +55,19 @@ RUN pip install -r requirements.txt \
     # Remove temporary files
     && rm -rf /root/.cache
 
-USER flaresolverr
-
 RUN mkdir -p "/app/.config/chromium/Crash Reports/pending"
 
 COPY src .
+COPY start-vnc.sh /app/start-vnc.sh
+RUN chmod +x /app/start-vnc.sh
+
+USER flaresolverr
 COPY package.json ../
 
 EXPOSE 8191
 EXPOSE 8192
+EXPOSE 5900
+EXPOSE 6080
 
 # dumb-init avoids zombie chromium processes
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
