@@ -690,6 +690,23 @@ async def _evil_logic(req: V1RequestBase, browser: Chrome, tab: Tab, method: str
     has_reloaded = False
     max_challenge_attempts = 30  # Max attempts before giving up (~30 seconds with 1s sleep)
     if challenge_found:
+        # Debug screenshot of challenge page
+        try:
+            screenshot_b64 = await tab.take_screenshot(as_base64=True)
+            import base64
+            screenshot_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'tmp')
+            os.makedirs(screenshot_dir, exist_ok=True)
+            with open(os.path.join(screenshot_dir, 'challenge-detected.png'), 'wb') as f:
+                f.write(base64.b64decode(screenshot_b64))
+            logging.info(f"Challenge screenshot saved to {screenshot_dir}/challenge-detected.png")
+            # Also dump full page HTML for DOM inspection
+            html_result = await tab.execute_script('return document.documentElement.outerHTML')
+            page_html = html_result.get('result', {}).get('result', {}).get('value', '')
+            with open(os.path.join(screenshot_dir, 'challenge-detected.html'), 'w') as f:
+                f.write(page_html)
+            logging.info(f"Challenge HTML saved to {screenshot_dir}/challenge-detected.html")
+        except Exception as e:
+            logging.debug(f"Could not save challenge debug files: {e}")
         while attempt < max_challenge_attempts:
             try:
                 attempt = attempt + 1

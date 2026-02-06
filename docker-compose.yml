@@ -15,6 +15,8 @@ services:
     - DISPLAY=:99
     - XAUTHORITY=/tmp/.Xauthority
     - VNC_PASSWORD=changeme
+    - TZ=America/New_York
+    - LANG=en-US.UTF-8
     - PORT=8191
     - PROXY_URL=http://REDACTED_PROXY_HOST
     - PROXY_USERNAME=REDACTED_USER
@@ -23,6 +25,8 @@ services:
       - "8191:8191"
       - "5900:5900"
       - "6080:6080"
+    volumes:
+      - ./debug-tmp:/app/tmp
     command: ["/bin/sh", "-c", "/app/start-vnc.sh && /usr/local/bin/python -u /app/flaresolverr.py"]
 
   jackett:
